@@ -1,12 +1,11 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Loader2 } from "lucide-react"
 
-// Simple loading component
-function LoadingScreen() {
+// Simple fallback component
+function SimpleFallback() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 flex items-center justify-center">
       <div className="text-center">
@@ -20,26 +19,57 @@ function LoadingScreen() {
 
 export default function AvatarBot() {
   const [isClient, setIsClient] = useState(false)
-  const [AvatarBotMain, setAvatarBotMain] = useState<React.ComponentType | null>(null)
+  const [MainComponent, setMainComponent] = useState<React.ComponentType | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Set client flag
     setIsClient(true)
 
-    // Dynamically import the main component only on client
+    // Add timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      setError("Loading timeout - components failed to load")
+    }, 10000) // 10 second timeout
+
+    // Try to load the main component
     import("@/components/avatar-bot-main")
       .then((module) => {
-        setAvatarBotMain(() => module.default)
+        clearTimeout(timeout)
+        setMainComponent(() => module.default)
       })
-      .catch((error) => {
-        console.error("Failed to load main component:", error)
+      .catch((err) => {
+        clearTimeout(timeout)
+        console.error("Failed to load main component:", err)
+        setError(`Failed to load components: ${err.message}`)
       })
+
+    return () => clearTimeout(timeout)
   }, [])
 
-  // Show loading until client-side and component is loaded
-  if (!isClient || !AvatarBotMain) {
-    return <LoadingScreen />
+  if (!isClient) {
+    return <SimpleFallback />
   }
 
-  return <AvatarBotMain />
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="text-red-400 mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold text-white mb-2">Loading Error</h1>
+          <p className="text-slate-300 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!MainComponent) {
+    return <SimpleFallback />
+  }
+
+  return <MainComponent />
 }

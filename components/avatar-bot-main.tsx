@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,95 +16,85 @@ import {
   MessageSquare,
   AlertCircle,
   Settings,
-  Loader2,
 } from "lucide-react"
+import { useConversation } from "@/hooks/use-conversation"
 
-// Lazy load components that might cause hydration issues
-function AvatarBotMain() {
-  const [isReady, setIsReady] = useState(false)
-  const [components, setComponents] = useState<{
-    useConversation: any
-    HumanAvatarCanvas: React.ComponentType<any> | null
-    VoiceSelector: React.ComponentType<any> | null
-  }>({
-    useConversation: null,
-    HumanAvatarCanvas: null,
-    VoiceSelector: null,
-  })
+// Simple avatar placeholder
+function SimpleAvatar({ emotion, isSpeaking }: { emotion: string; isSpeaking: boolean }) {
+  const getEmotionColor = () => {
+    switch (emotion) {
+      case "happy":
+        return "bg-yellow-400"
+      case "sad":
+        return "bg-blue-400"
+      case "excited":
+        return "bg-red-400"
+      case "concerned":
+        return "bg-purple-400"
+      default:
+        return "bg-green-400"
+    }
+  }
 
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-slate-900 rounded-lg relative">
+      <div
+        className={`w-32 h-32 rounded-full ${getEmotionColor()} flex items-center justify-center transition-all duration-300 ${isSpeaking ? "scale-110 animate-pulse" : ""}`}
+      >
+        <div className="text-4xl">🤖</div>
+      </div>
+      {isSpeaking && (
+        <div className="absolute top-4 right-4">
+          <div className="flex items-center gap-2 bg-blue-600/80 px-3 py-1 rounded-full">
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+            <span className="text-white text-sm font-medium">Speaking</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Simple voice selector
+function SimpleVoiceSelector({
+  selectedVoice,
+  availableVoices,
+  onVoiceChange,
+}: {
+  selectedVoice: SpeechSynthesisVoice | null
+  availableVoices: SpeechSynthesisVoice[]
+  onVoiceChange: (voice: SpeechSynthesisVoice) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Volume2 className="w-4 h-4 text-slate-400" />
+        <span className="text-sm font-medium text-slate-300">Voice Selection</span>
+      </div>
+      <select
+        className="w-full p-2 bg-slate-700 border border-slate-600 rounded text-slate-200"
+        value={selectedVoice?.name || ""}
+        onChange={(e) => {
+          const voice = availableVoices.find((v) => v.name === e.target.value)
+          if (voice) onVoiceChange(voice)
+        }}
+      >
+        <option value="">Select a voice...</option>
+        {availableVoices.map((voice) => (
+          <option key={voice.name} value={voice.name}>
+            {voice.name} ({voice.lang})
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+export default function AvatarBotMain() {
   const [isMuted, setIsMuted] = useState(false)
   const [testResult, setTestResult] = useState<any>(null)
   const [azureTestResult, setAzureTestResult] = useState<any>(null)
 
-  useEffect(() => {
-    // Load all components after mount to avoid hydration issues
-    Promise.all([
-      import("@/hooks/use-conversation"),
-      import("@/components/human-avatar"),
-      import("@/components/voice-selector"),
-    ])
-      .then(([conversationModule, avatarModule, voiceModule]) => {
-        setComponents({
-          useConversation: conversationModule.useConversation,
-          HumanAvatarCanvas: avatarModule.HumanAvatarCanvas,
-          VoiceSelector: voiceModule.VoiceSelector,
-        })
-        setIsReady(true)
-      })
-      .catch((error) => {
-        console.error("Failed to load components:", error)
-      })
-  }, [])
-
-  if (!isReady || !components.useConversation) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-white mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-white mb-2">Loading Components...</h1>
-          <p className="text-slate-300">Please wait while we initialize the avatar system</p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <AvatarBotContent
-      useConversation={components.useConversation}
-      HumanAvatarCanvas={components.HumanAvatarCanvas}
-      VoiceSelector={components.VoiceSelector}
-      isMuted={isMuted}
-      setIsMuted={setIsMuted}
-      testResult={testResult}
-      setTestResult={setTestResult}
-      azureTestResult={azureTestResult}
-      setAzureTestResult={setAzureTestResult}
-    />
-  )
-}
-
-// Separate component that uses the loaded hooks and components
-function AvatarBotContent({
-  useConversation,
-  HumanAvatarCanvas,
-  VoiceSelector,
-  isMuted,
-  setIsMuted,
-  testResult,
-  setTestResult,
-  azureTestResult,
-  setAzureTestResult,
-}: {
-  useConversation: any
-  HumanAvatarCanvas: React.ComponentType<any> | null
-  VoiceSelector: React.ComponentType<any> | null
-  isMuted: boolean
-  setIsMuted: (muted: boolean) => void
-  testResult: any
-  setTestResult: (result: any) => void
-  azureTestResult: any
-  setAzureTestResult: (result: any) => void
-}) {
   const {
     messages,
     state,
@@ -273,26 +261,8 @@ function AvatarBotContent({
               <CardContent>
                 {/* Avatar Display */}
                 <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden relative">
-                  {HumanAvatarCanvas ? (
-                    <HumanAvatarCanvas
-                      emotion={state.emotion}
-                      isSpeaking={state.isSpeaking}
-                      audioLevel={state.audioLevel}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-                    </div>
-                  )}
+                  <SimpleAvatar emotion={state.emotion} isSpeaking={state.isSpeaking} />
 
-                  {state.isSpeaking && (
-                    <div className="absolute top-4 right-4">
-                      <div className="flex items-center gap-2 bg-blue-600/80 px-3 py-1 rounded-full">
-                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                        <span className="text-white text-sm font-medium">Speaking</span>
-                      </div>
-                    </div>
-                  )}
                   {state.isListening && (
                     <div className="absolute top-4 left-4">
                       <div className="flex items-center gap-2 bg-red-600/80 px-3 py-1 rounded-full">
@@ -329,20 +299,11 @@ function AvatarBotContent({
 
                 {/* Voice Selection */}
                 <div className="mt-4 p-4 bg-slate-800/50 rounded-lg">
-                  {VoiceSelector ? (
-                    <VoiceSelector
-                      selectedVoice={selectedVoice}
-                      availableVoices={availableVoices}
-                      onVoiceChange={setSelectedVoice}
-                    />
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Volume2 className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm font-medium text-slate-300">Loading voices...</span>
-                      </div>
-                    </div>
-                  )}
+                  <SimpleVoiceSelector
+                    selectedVoice={selectedVoice}
+                    availableVoices={availableVoices}
+                    onVoiceChange={setSelectedVoice}
+                  />
                 </div>
 
                 {/* Controls */}
@@ -491,5 +452,3 @@ function AvatarBotContent({
     </div>
   )
 }
-
-export default AvatarBotMain
