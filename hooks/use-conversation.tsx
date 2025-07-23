@@ -218,10 +218,8 @@ export function useConversation() {
             await append({ role: "user", content: webSpeechTextRef.current })
           } catch (error) {
             console.error("Error appending message:", error)
-            setState((prev) => ({
-              ...prev,
-              error: "Failed to send message to AI. Please try again.",
-            }))
+            // Try direct API call as fallback
+            await tryDirectChat(webSpeechTextRef.current)
           }
         } else {
           // Fallback to Azure Speech Services
@@ -329,10 +327,8 @@ export function useConversation() {
           await append({ role: "user", content: result.text })
         } catch (error) {
           console.error("Error appending Azure Speech result:", error)
-          setState((prev) => ({
-            ...prev,
-            error: "Failed to send transcribed message to AI. Please try again.",
-          }))
+          // Try direct API call as fallback
+          await tryDirectChat(result.text)
         }
       } else if (result.error) {
         console.warn("Azure Speech failed:", result.error)
@@ -352,17 +348,62 @@ export function useConversation() {
     }
   }
 
+  // Direct API call as fallback when AI SDK fails
+  const tryDirectChat = async (userMessage: string) => {
+    try {
+      console.log("Trying direct chat API as fallback...")
+      setState((prev) => ({ ...prev, isProcessing: true }))
+
+      const response = await fetch("/api/chat-direct", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: userMessage }],
+        }),
+      })
+
+      const result = await response.json()
+      console.log("Direct chat result:", result)
+
+      if (result.success && result.message) {
+        // Manually add messages to the conversation
+        const newMessages = [
+          ...messages,
+          { id: Date.now().toString(), role: "user", content: userMessage },
+          { id: (Date.now() + 1).toString(), role: "assistant", content: result.message },
+        ]
+
+        // Analyze emotion and speak the response
+        const emotion = analyzeEmotion(result.message)
+        setState((prev) => ({ ...prev, emotion, isSpeaking: true, error: null }))
+        speakText(result.message)
+      } else {
+        setState((prev) => ({
+          ...prev,
+          error: result.error || "Direct chat failed",
+        }))
+      }
+    } catch (error) {
+      console.error("Direct chat error:", error)
+      setState((prev) => ({
+        ...prev,
+        error: "All chat methods failed. Please check your configuration.",
+      }))
+    } finally {
+      setState((prev) => ({ ...prev, isProcessing: false }))
+    }
+  }
+
   // Test chat functionality
   const testChat = useCallback(async () => {
     try {
       console.log("Testing chat functionality...")
       await append({ role: "user", content: "Hello, can you hear me?" })
     } catch (error) {
-      console.error("Chat test failed:", error)
-      setState((prev) => ({
-        ...prev,
-        error: "Chat test failed. Please check your configuration.",
-      }))
+      console.error("Chat test failed, trying direct API:", error)
+      await tryDirectChat("Hello, can you hear me?")
     }
   }, [append])
 

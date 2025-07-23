@@ -1,13 +1,6 @@
 import { streamText } from "ai"
 import { createAzure } from "@ai-sdk/azure"
 
-// Create Azure client with proper configuration
-const azure = createAzure({
-  resourceName: "openaiservices-gosign",
-  apiKey: process.env.AZURE_OPENAI_API_KEY!,
-  apiVersion: "2025-01-01-preview",
-})
-
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json()
@@ -15,7 +8,6 @@ export async function POST(req: Request) {
     console.log("=== CHAT API DEBUG ===")
     console.log("Messages received:", JSON.stringify(messages, null, 2))
     console.log("Azure OpenAI API Key exists:", !!process.env.AZURE_OPENAI_API_KEY)
-    console.log("Azure OpenAI API Key length:", process.env.AZURE_OPENAI_API_KEY?.length)
     console.log("Azure OpenAI Endpoint:", process.env.AZURE_OPENAI_ENDPOINT)
     console.log("Deployment Name:", process.env.DEPLOYMENT_NAME)
 
@@ -27,10 +19,25 @@ export async function POST(req: Request) {
       throw new Error("DEPLOYMENT_NAME is not configured")
     }
 
-    // Use the deployment name from environment variable
+    // Extract the base URL from the full endpoint
+    const fullEndpoint = process.env.AZURE_OPENAI_ENDPOINT!
+    const baseUrl = fullEndpoint.split("/openai/deployments/")[0]
+    const resourceName = baseUrl.split("https://")[1].split(".openai.azure.com")[0]
+
+    console.log("Extracted base URL:", baseUrl)
+    console.log("Extracted resource name:", resourceName)
+
+    // Create Azure client with correct configuration
+    const azure = createAzure({
+      resourceName: resourceName,
+      apiKey: process.env.AZURE_OPENAI_API_KEY!,
+      apiVersion: "2025-01-01-preview",
+    })
+
     const deploymentName = process.env.DEPLOYMENT_NAME
 
     console.log("Using deployment:", deploymentName)
+    console.log("Azure client configured successfully")
 
     const result = streamText({
       model: azure(deploymentName),
@@ -66,6 +73,8 @@ export async function POST(req: Request) {
       hasApiKey: !!process.env.AZURE_OPENAI_API_KEY,
       hasEndpoint: !!process.env.AZURE_OPENAI_ENDPOINT,
       hasDeployment: !!process.env.DEPLOYMENT_NAME,
+      fullEndpoint: process.env.AZURE_OPENAI_ENDPOINT,
+      deploymentName: process.env.DEPLOYMENT_NAME,
     }
 
     console.error("Returning error response:", errorDetails)
