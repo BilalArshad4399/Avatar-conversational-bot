@@ -35,7 +35,7 @@ npm install
 Create `.env.local` with your Azure credentials:
 \`\`\`env
 # Azure OpenAI Configuration
-AZURE_OPENAI_ENDPOINT=https://openaiservices-gosign.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
+AZURE_OPENAI_ENDPOINT=your-azure-openai-endpoint
 AZURE_OPENAI_API_KEY=your-azure-openai-api-key
 DEPLOYMENT_NAME=your-deployment-name
 \`\`\`
