@@ -18,9 +18,22 @@ import {
   Settings,
 } from "lucide-react"
 import { useConversation } from "@/hooks/use-conversation"
+import { HumanAvatarCanvas } from "@/components/human-avatar"
+import { VoiceSelector } from "@/components/voice-selector"
 
 export default function AvatarBot() {
-  const { messages, state, startListening, stopListening, testChat, isLoading, error } = useConversation()
+  const {
+    messages,
+    state,
+    startListening,
+    stopListening,
+    testChat,
+    isLoading,
+    error,
+    selectedVoice,
+    availableVoices,
+    setSelectedVoice,
+  } = useConversation()
   const [isMuted, setIsMuted] = useState(false)
   const [testResult, setTestResult] = useState<any>(null)
   const [azureTestResult, setAzureTestResult] = useState<any>(null)
@@ -193,22 +206,26 @@ export default function AvatarBot() {
               </CardHeader>
               <CardContent>
                 {/* Avatar Display */}
-                <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center relative">
-                  <div
-                    className={`w-32 h-32 rounded-full ${getAvatarColor()} transition-all duration-500 flex items-center justify-center ${state.isSpeaking ? "animate-pulse scale-110" : ""}`}
-                  >
-                    <Bot className="w-16 h-16 text-white" />
-                  </div>
+                <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden relative">
+                  <HumanAvatarCanvas
+                    emotion={state.emotion}
+                    isSpeaking={state.isSpeaking}
+                    audioLevel={state.audioLevel}
+                  />
+
                   {state.isSpeaking && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-40 h-40 rounded-full border-4 border-white/30 animate-ping"></div>
+                    <div className="absolute top-4 right-4">
+                      <div className="flex items-center gap-2 bg-blue-600/80 px-3 py-1 rounded-full">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        <span className="text-white text-sm font-medium">Speaking</span>
+                      </div>
                     </div>
                   )}
                   {state.isListening && (
-                    <div className="absolute top-4 right-4">
+                    <div className="absolute top-4 left-4">
                       <div className="flex items-center gap-2 bg-red-600/80 px-3 py-1 rounded-full">
                         <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                        <span className="text-white text-sm font-medium">Recording</span>
+                        <span className="text-white text-sm font-medium">Listening</span>
                       </div>
                     </div>
                   )}
@@ -238,6 +255,15 @@ export default function AvatarBot() {
                       />
                     ))}
                   </div>
+                </div>
+
+                {/* Voice Selection */}
+                <div className="mt-4 p-4 bg-slate-800/50 rounded-lg">
+                  <VoiceSelector
+                    selectedVoice={selectedVoice}
+                    availableVoices={availableVoices}
+                    onVoiceChange={setSelectedVoice}
+                  />
                 </div>
 
                 {/* Controls */}

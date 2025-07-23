@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { useChat } from "ai/react"
 import type { SpeechRecognition } from "speech-recognition-polyfill"
 
@@ -24,6 +24,29 @@ export function useConversation() {
     confidence: 0,
     error: null,
   })
+
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null)
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
+
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = speechSynthesis.getVoices()
+      const englishVoices = voices.filter((voice) => voice.lang.startsWith("en"))
+      setAvailableVoices(englishVoices)
+
+      // Set default voice (prefer Neural or Premium voices)
+      const defaultVoice =
+        englishVoices.find((voice) => voice.name.includes("Neural") || voice.name.includes("Premium")) ||
+        englishVoices[0]
+
+      if (defaultVoice && !selectedVoice) {
+        setSelectedVoice(defaultVoice)
+      }
+    }
+
+    loadVoices()
+    speechSynthesis.onvoiceschanged = loadVoices
+  }, [selectedVoice])
 
   const { messages, append, isLoading, error } = useChat({
     api: "/api/chat",
@@ -54,56 +77,154 @@ export function useConversation() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   const analyzeEmotion = (text: string): string => {
-    // Enhanced emotion analysis
+    const lowerText = text.toLowerCase()
+
+    // Enhanced emotion analysis with scoring
     const emotions = {
-      happy: ["great", "wonderful", "amazing", "excellent", "fantastic", "awesome", "brilliant", "love", "perfect"],
-      sad: ["sorry", "unfortunately", "sad", "disappointed", "regret", "apologize", "terrible", "awful"],
-      excited: ["exciting", "awesome", "incredible", "wow", "fantastic", "amazing", "unbelievable", "thrilled"],
-      concerned: ["concerned", "worried", "careful", "caution", "warning", "problem", "issue", "trouble"],
+      happy: {
+        keywords: [
+          "great",
+          "wonderful",
+          "amazing",
+          "excellent",
+          "fantastic",
+          "awesome",
+          "brilliant",
+          "love",
+          "perfect",
+          "good",
+          "nice",
+          "pleased",
+          "delighted",
+          "thrilled",
+          "excited",
+          "joy",
+          "happy",
+          "glad",
+          "cheerful",
+        ],
+        score: 0,
+      },
+      sad: {
+        keywords: [
+          "sorry",
+          "unfortunately",
+          "sad",
+          "disappointed",
+          "regret",
+          "apologize",
+          "terrible",
+          "awful",
+          "bad",
+          "upset",
+          "depressed",
+          "unhappy",
+          "miserable",
+          "tragic",
+          "heartbreaking",
+        ],
+        score: 0,
+      },
+      excited: {
+        keywords: [
+          "exciting",
+          "awesome",
+          "incredible",
+          "wow",
+          "fantastic",
+          "amazing",
+          "unbelievable",
+          "thrilled",
+          "energetic",
+          "enthusiastic",
+          "pumped",
+          "fired up",
+          "can't wait",
+          "amazing",
+        ],
+        score: 0,
+      },
+      concerned: {
+        keywords: [
+          "concerned",
+          "worried",
+          "careful",
+          "caution",
+          "warning",
+          "problem",
+          "issue",
+          "trouble",
+          "difficult",
+          "challenging",
+          "serious",
+          "urgent",
+          "important",
+          "critical",
+        ],
+        score: 0,
+      },
     }
 
-    for (const [emotion, keywords] of Object.entries(emotions)) {
-      if (keywords.some((keyword) => text.toLowerCase().includes(keyword))) {
-        return emotion
-      }
+    // Calculate scores for each emotion
+    for (const [emotion, data] of Object.entries(emotions)) {
+      data.score = data.keywords.reduce((score, keyword) => {
+        const matches = (lowerText.match(new RegExp(keyword, "g")) || []).length
+        return score + matches
+      }, 0)
     }
-    return "neutral"
+
+    // Find the emotion with the highest score
+    const topEmotion = Object.entries(emotions).reduce(
+      (max, [emotion, data]) => (data.score > max.score ? { emotion, score: data.score } : max),
+      { emotion: "neutral", score: 0 },
+    )
+
+    console.log("Emotion analysis:", emotions, "Selected:", topEmotion.emotion)
+
+    return topEmotion.score > 0 ? topEmotion.emotion : "neutral"
   }
 
-  const speakText = useCallback((text: string) => {
-    if ("speechSynthesis" in window) {
-      // Cancel any ongoing speech
-      speechSynthesis.cancel()
+  const speakText = useCallback(
+    (text: string) => {
+      if ("speechSynthesis" in window) {
+        speechSynthesis.cancel()
 
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 0.9
-      utterance.pitch = 1.1
-      utterance.volume = 0.8
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.rate = 0.9
+        utterance.pitch = 1.1
+        utterance.volume = 0.8
 
-      // Try to use a more natural voice
-      const voices = speechSynthesis.getVoices()
-      const preferredVoice = voices.find(
-        (voice) => voice.name.includes("Neural") || voice.name.includes("Premium") || voice.lang.startsWith("en-US"),
-      )
-      if (preferredVoice) {
-        utterance.voice = preferredVoice
+        // Use selected voice or find a good default
+        if (selectedVoice) {
+          utterance.voice = selectedVoice
+        } else {
+          const voices = speechSynthesis.getVoices()
+          const preferredVoice = voices.find(
+            (voice) =>
+              voice.name.includes("Neural") || voice.name.includes("Premium") || voice.lang.startsWith("en-US"),
+          )
+          if (preferredVoice) {
+            utterance.voice = preferredVoice
+          }
+        }
+
+        utterance.onstart = () => {
+          setState((prev) => ({ ...prev, isSpeaking: true }))
+        }
+
+        utterance.onend = () => {
+          setState((prev) => ({ ...prev, isSpeaking: false }))
+        }
+
+        utterance.onerror = () => {
+          setState((prev) => ({ ...prev, isSpeaking: false }))
+        }
+
+        speechSynthesis.speak(utterance)
       }
-
-      utterance.onstart = () => {
-        setState((prev) => ({ ...prev, isSpeaking: true }))
-      }
-
-      utterance.onend = () => {
-        setState((prev) => ({ ...prev, isSpeaking: false }))
-      }
-
-      utterance.onerror = () => {
-        setState((prev) => ({ ...prev, isSpeaking: false }))
-      }
-
-      speechSynthesis.speak(utterance)
-    }
-  }, [])
+    },
+    [selectedVoice],
+  )
 
   const convertToWav = async (audioBlob: Blob): Promise<Blob> => {
     try {
@@ -415,5 +536,8 @@ export function useConversation() {
     testChat,
     isLoading,
     error,
+    selectedVoice,
+    availableVoices,
+    setSelectedVoice,
   }
 }
