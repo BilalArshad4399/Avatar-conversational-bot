@@ -5,13 +5,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Mic, MicOff, Volume2, VolumeX, User, Bot, Headphones, MessageSquare, AlertCircle } from "lucide-react"
+import {
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  User,
+  Bot,
+  Headphones,
+  MessageSquare,
+  AlertCircle,
+  Settings,
+} from "lucide-react"
 import { useConversation } from "@/hooks/use-conversation"
 
 export default function AvatarBot() {
   const { messages, state, startListening, stopListening, testChat, isLoading, error } = useConversation()
   const [isMuted, setIsMuted] = useState(false)
   const [testResult, setTestResult] = useState<any>(null)
+  const [azureTestResult, setAzureTestResult] = useState<any>(null)
 
   useEffect(() => {
     // Mute/unmute speech synthesis
@@ -27,8 +39,20 @@ export default function AvatarBot() {
       setTestResult(result)
       console.log("Azure Speech config test:", result)
     } catch (error) {
-      console.error("Test failed:", error)
-      setTestResult({ error: "Test failed" })
+      console.error("Speech test failed:", error)
+      setTestResult({ error: "Speech test failed" })
+    }
+  }
+
+  const testAzureOpenAI = async () => {
+    try {
+      const response = await fetch("/api/test-azure-openai")
+      const result = await response.json()
+      setAzureTestResult(result)
+      console.log("Azure OpenAI test:", result)
+    } catch (error) {
+      console.error("Azure OpenAI test failed:", error)
+      setAzureTestResult({ error: "Azure OpenAI test failed" })
     }
   }
 
@@ -85,7 +109,7 @@ export default function AvatarBot() {
         )}
 
         {/* Test Configuration Buttons */}
-        <div className="text-center mb-4 flex gap-2 justify-center">
+        <div className="text-center mb-4 flex gap-2 justify-center flex-wrap">
           <Button
             onClick={testSpeechConfig}
             variant="outline"
@@ -93,7 +117,16 @@ export default function AvatarBot() {
             className="border-slate-600 text-slate-300 bg-transparent"
           >
             <Headphones className="w-4 h-4 mr-2" />
-            Test Speech Config
+            Test Speech
+          </Button>
+          <Button
+            onClick={testAzureOpenAI}
+            variant="outline"
+            size="sm"
+            className="border-slate-600 text-slate-300 bg-transparent"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Test Azure OpenAI
           </Button>
           <Button
             onClick={testChat}
@@ -106,9 +139,33 @@ export default function AvatarBot() {
           </Button>
         </div>
 
-        {testResult && (
-          <div className="mb-4 p-2 bg-slate-800 rounded text-xs text-slate-300 max-w-md mx-auto">
-            <pre className="whitespace-pre-wrap">{JSON.stringify(testResult, null, 2)}</pre>
+        {/* Test Results */}
+        {(testResult || azureTestResult) && (
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {testResult && (
+              <div className="p-3 bg-slate-800 rounded text-xs text-slate-300">
+                <h3 className="font-bold mb-2 text-blue-300">Speech Test Result:</h3>
+                <pre className="whitespace-pre-wrap overflow-auto max-h-40">{JSON.stringify(testResult, null, 2)}</pre>
+              </div>
+            )}
+            {azureTestResult && (
+              <div className="p-3 bg-slate-800 rounded text-xs text-slate-300">
+                <h3 className="font-bold mb-2 text-green-300">Azure OpenAI Test Result:</h3>
+                <pre className="whitespace-pre-wrap overflow-auto max-h-40">
+                  {JSON.stringify(azureTestResult, null, 2)}
+                </pre>
+                {azureTestResult.success && (
+                  <div className="mt-2 p-2 bg-green-900/30 border border-green-700 rounded">
+                    <span className="text-green-300 font-medium">✅ Azure OpenAI is working!</span>
+                  </div>
+                )}
+                {azureTestResult.success === false && (
+                  <div className="mt-2 p-2 bg-red-900/30 border border-red-700 rounded">
+                    <span className="text-red-300 font-medium">❌ Azure OpenAI connection failed</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -240,7 +297,7 @@ export default function AvatarBot() {
                   <div className="space-y-4">
                     {messages.length === 0 ? (
                       <div className="text-slate-400 text-center py-8">
-                        Start a conversation by clicking "Start Listening" or "Test Chat"
+                        Start a conversation by clicking "Start Listening" or test the system with the buttons above
                       </div>
                     ) : (
                       messages.map((message, index) => (
