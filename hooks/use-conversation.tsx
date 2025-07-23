@@ -38,14 +38,16 @@ export function useConversation() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const webSpeechTextRef = useRef<string>("")
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const analyzeEmotion = (text: string): string => {
-    // Simple emotion analysis - in production, use Azure Cognitive Services
+    // Enhanced emotion analysis
     const emotions = {
-      happy: ["great", "wonderful", "amazing", "excellent", "fantastic"],
-      sad: ["sorry", "unfortunately", "sad", "disappointed"],
-      excited: ["exciting", "awesome", "incredible", "wow"],
-      concerned: ["concerned", "worried", "careful", "caution"],
+      happy: ["great", "wonderful", "amazing", "excellent", "fantastic", "awesome", "brilliant", "love", "perfect"],
+      sad: ["sorry", "unfortunately", "sad", "disappointed", "regret", "apologize", "terrible", "awful"],
+      excited: ["exciting", "awesome", "incredible", "wow", "fantastic", "amazing", "unbelievable", "thrilled"],
+      concerned: ["concerned", "worried", "careful", "caution", "warning", "problem", "issue", "trouble"],
     }
 
     for (const [emotion, keywords] of Object.entries(emotions)) {
@@ -58,10 +60,22 @@ export function useConversation() {
 
   const speakText = useCallback((text: string) => {
     if ("speechSynthesis" in window) {
+      // Cancel any ongoing speech
+      speechSynthesis.cancel()
+
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.rate = 0.9
       utterance.pitch = 1.1
       utterance.volume = 0.8
+
+      // Try to use a more natural voice
+      const voices = speechSynthesis.getVoices()
+      const preferredVoice = voices.find(
+        (voice) => voice.name.includes("Neural") || voice.name.includes("Premium") || voice.lang.startsWith("en-US"),
+      )
+      if (preferredVoice) {
+        utterance.voice = preferredVoice
+      }
 
       utterance.onstart = () => {
         setState((prev) => ({ ...prev, isSpeaking: true }))
@@ -71,43 +85,160 @@ export function useConversation() {
         setState((prev) => ({ ...prev, isSpeaking: false }))
       }
 
+      utterance.onerror = () => {
+        setState((prev) => ({ ...prev, isSpeaking: false }))
+      }
+
       speechSynthesis.speak(utterance)
     }
   }, [])
 
+  const convertToWav = async (audioBlob: Blob): Promise<Blob> => {
+    try {
+      // Create audio context for processing
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      }
+
+      const arrayBuffer = await audioBlob.arrayBuffer()
+      const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer)
+
+      // Convert to WAV format (16-bit PCM, 16kHz sample rate for Azure Speech)
+      const length = audioBuffer.length
+      const sampleRate = 16000 // Azure Speech Services prefers 16kHz
+      const channels = 1 // Mono
+
+      // Resample if necessary
+      let samples: Float32Array
+      if (audioBuffer.sampleRate !== sampleRate) {
+        const ratio = audioBuffer.sampleRate / sampleRate
+        const newLength = Math.round(length / ratio)
+        samples = new Float32Array(newLength)
+
+        for (let i = 0; i < newLength; i++) {
+          const index = Math.floor(i * ratio)
+          samples[i] = audioBuffer.getChannelData(0)[index] || 0
+        }
+      } else {
+        samples = audioBuffer.getChannelData(0)
+      }
+
+      // Create WAV file
+      const buffer = new ArrayBuffer(44 + samples.length * 2)
+      const view = new DataView(buffer)
+
+      // WAV header
+      const writeString = (offset: number, string: string) => {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i))
+        }
+      }
+
+      writeString(0, "RIFF")
+      view.setUint32(4, 36 + samples.length * 2, true)
+      writeString(8, "WAVE")
+      writeString(12, "fmt ")
+      view.setUint32(16, 16, true)
+      view.setUint16(20, 1, true)
+      view.setUint16(22, channels, true)
+      view.setUint32(24, sampleRate, true)
+      view.setUint32(28, sampleRate * channels * 2, true)
+      view.setUint16(32, channels * 2, true)
+      view.setUint16(34, 16, true)
+      writeString(36, "data")
+      view.setUint32(40, samples.length * 2, true)
+
+      // Convert samples to 16-bit PCM
+      let offset = 44
+      for (let i = 0; i < samples.length; i++) {
+        const sample = Math.max(-1, Math.min(1, samples[i]))
+        view.setInt16(offset, sample * 0x7fff, true)
+        offset += 2
+      }
+
+      return new Blob([buffer], { type: "audio/wav" })
+    } catch (error) {
+      console.error("Error converting to WAV:", error)
+      return audioBlob // Return original if conversion fails
+    }
+  }
+
   const startListening = useCallback(async () => {
     try {
-      // Start audio recording for Azure Whisper
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream)
+      // Reset previous text
+      webSpeechTextRef.current = ""
+
+      // Start audio recording for Azure Speech Services
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus",
+      })
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
 
       mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data)
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
       }
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" })
-        await processAudio(audioBlob)
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+
+        // Use both Web Speech API result and Azure Speech Services
+        if (webSpeechTextRef.current.trim()) {
+          console.log("Using Web Speech API result:", webSpeechTextRef.current)
+          setState((prev) => ({ ...prev, confidence: 0.9 }))
+          await append({ role: "user", content: webSpeechTextRef.current })
+        } else {
+          // Fallback to Azure Speech Services
+          await processAudioWithAzureSpeech(audioBlob)
+        }
+
         stream.getTracks().forEach((track) => track.stop())
       }
 
-      // Also use Web Speech API for real-time feedback
+      // Primary: Use Web Speech API for real-time recognition
       if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
         const recognition = new SpeechRecognition()
         recognitionRef.current = recognition
 
-        recognition.continuous = true
-        recognition.interimResults = true
+        recognition.continuous = false
+        recognition.interimResults = false
         recognition.lang = "en-US"
 
         recognition.onresult = (event) => {
-          const result = event.results[event.results.length - 1]
+          const result = event.results[0]
           if (result.isFinal) {
+            const transcript = result[0].transcript
             const confidence = result[0].confidence || 0.8
+
+            console.log("Web Speech API result:", transcript, "confidence:", confidence)
+            webSpeechTextRef.current = transcript
             setState((prev) => ({ ...prev, confidence }))
+          }
+        }
+
+        recognition.onerror = (event) => {
+          console.error("Speech recognition error:", event.error)
+          // Continue with audio recording for Azure fallback
+        }
+
+        recognition.onend = () => {
+          console.log("Speech recognition ended")
+          // Stop audio recording
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+            mediaRecorderRef.current.stop()
           }
         }
 
@@ -123,6 +254,7 @@ export function useConversation() {
       }, 10000)
     } catch (error) {
       console.error("Error starting speech recognition:", error)
+      setState((prev) => ({ ...prev, isListening: false }))
     }
   }, [])
 
@@ -138,30 +270,37 @@ export function useConversation() {
     setState((prev) => ({ ...prev, isListening: false }))
   }, [])
 
-  const processAudio = async (audioBlob: Blob) => {
+  const processAudioWithAzureSpeech = async (audioBlob: Blob) => {
     setState((prev) => ({ ...prev, isProcessing: true }))
 
     try {
-      const formData = new FormData()
-      formData.append("audio", audioBlob, "audio.wav")
+      console.log("Processing audio with Azure Speech Services:", audioBlob.size, "bytes")
 
-      const response = await fetch("/api/whisper", {
+      // Convert to WAV format for better Azure Speech compatibility
+      const wavBlob = await convertToWav(audioBlob)
+      console.log("Converted to WAV:", wavBlob.size, "bytes")
+
+      const formData = new FormData()
+      formData.append("audio", wavBlob, "audio.wav")
+
+      const response = await fetch("/api/speech", {
         method: "POST",
         body: formData,
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to transcribe audio")
-      }
+      const result = await response.json()
+      console.log("Azure Speech API response:", result)
 
-      const { text, confidence } = await response.json()
-
-      if (text.trim()) {
-        setState((prev) => ({ ...prev, confidence }))
-        await append({ role: "user", content: text })
+      if (response.ok && result.text && result.text.trim()) {
+        setState((prev) => ({ ...prev, confidence: result.confidence || 0.8 }))
+        await append({ role: "user", content: result.text })
+      } else if (result.error) {
+        console.warn("Azure Speech failed:", result.error)
+        // Don't throw error, just log it
       }
     } catch (error) {
-      console.error("Error processing audio:", error)
+      console.error("Error processing audio with Azure Speech:", error)
+      // Don't throw error to prevent breaking the UI
     } finally {
       setState((prev) => ({ ...prev, isProcessing: false }))
     }

@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Mic, MicOff, Volume2, VolumeX, User, Bot } from "lucide-react"
+import { Mic, MicOff, Volume2, VolumeX, User, Bot, Headphones } from "lucide-react"
 import { useConversation } from "@/hooks/use-conversation"
 
 export default function AvatarBot() {
   const { messages, state, startListening, stopListening, isLoading } = useConversation()
   const [isMuted, setIsMuted] = useState(false)
+  const [testResult, setTestResult] = useState<any>(null)
 
   useEffect(() => {
     // Mute/unmute speech synthesis
@@ -18,6 +19,18 @@ export default function AvatarBot() {
       speechSynthesis.cancel()
     }
   }, [isMuted])
+
+  const testSpeechConfig = async () => {
+    try {
+      const response = await fetch("/api/test-speech")
+      const result = await response.json()
+      setTestResult(result)
+      console.log("Azure Speech config test:", result)
+    } catch (error) {
+      console.error("Test failed:", error)
+      setTestResult({ error: "Test failed" })
+    }
+  }
 
   const getStatusColor = () => {
     if (state.isListening) return "bg-red-500"
@@ -54,7 +67,25 @@ export default function AvatarBot() {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Azure AI Avatar Assistant</h1>
-          <p className="text-slate-300">Powered by Azure OpenAI GPT-4o with real-time voice interaction</p>
+          <p className="text-slate-300">Powered by Azure OpenAI GPT-4o + Azure Speech Services</p>
+        </div>
+
+        {/* Test Configuration Button */}
+        <div className="text-center mb-4">
+          <Button
+            onClick={testSpeechConfig}
+            variant="outline"
+            size="sm"
+            className="border-slate-600 text-slate-300 bg-transparent"
+          >
+            <Headphones className="w-4 h-4 mr-2" />
+            Test Speech Config
+          </Button>
+          {testResult && (
+            <div className="mt-2 p-2 bg-slate-800 rounded text-xs text-slate-300 max-w-md mx-auto">
+              <pre className="whitespace-pre-wrap">{JSON.stringify(testResult, null, 2)}</pre>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -90,6 +121,14 @@ export default function AvatarBot() {
                   {state.isSpeaking && (
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-40 h-40 rounded-full border-4 border-white/30 animate-ping"></div>
+                    </div>
+                  )}
+                  {state.isListening && (
+                    <div className="absolute top-4 right-4">
+                      <div className="flex items-center gap-2 bg-red-600/80 px-3 py-1 rounded-full">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        <span className="text-white text-sm font-medium">Recording</span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -222,6 +261,11 @@ export default function AvatarBot() {
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
               <span className="text-slate-300 text-sm">Model: gpt-4o-pilot-ai-production</span>
+            </div>
+            <div className="w-px h-4 bg-slate-600"></div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+              <span className="text-slate-300 text-sm">Speech: Azure Speech Services</span>
             </div>
           </div>
         </div>
