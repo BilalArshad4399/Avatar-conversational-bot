@@ -5,11 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Mic, MicOff, Volume2, VolumeX, User, Bot, Headphones } from "lucide-react"
+import { Mic, MicOff, Volume2, VolumeX, User, Bot, Headphones, MessageSquare, AlertCircle } from "lucide-react"
 import { useConversation } from "@/hooks/use-conversation"
 
 export default function AvatarBot() {
-  const { messages, state, startListening, stopListening, isLoading } = useConversation()
+  const { messages, state, startListening, stopListening, testChat, isLoading, error } = useConversation()
   const [isMuted, setIsMuted] = useState(false)
   const [testResult, setTestResult] = useState<any>(null)
 
@@ -33,6 +33,7 @@ export default function AvatarBot() {
   }
 
   const getStatusColor = () => {
+    if (state.error) return "bg-red-500"
     if (state.isListening) return "bg-red-500"
     if (state.isSpeaking) return "bg-blue-500"
     if (state.isProcessing || isLoading) return "bg-yellow-500"
@@ -40,6 +41,7 @@ export default function AvatarBot() {
   }
 
   const getStatusText = () => {
+    if (state.error) return "Error"
     if (state.isListening) return "Listening..."
     if (state.isSpeaking) return "Speaking..."
     if (state.isProcessing) return "Processing..."
@@ -48,6 +50,7 @@ export default function AvatarBot() {
   }
 
   const getAvatarColor = () => {
+    if (state.error) return "bg-red-400"
     switch (state.emotion) {
       case "happy":
         return "bg-yellow-400"
@@ -70,8 +73,19 @@ export default function AvatarBot() {
           <p className="text-slate-300">Powered by Azure OpenAI GPT-4o + Azure Speech Services</p>
         </div>
 
-        {/* Test Configuration Button */}
-        <div className="text-center mb-4">
+        {/* Error Display */}
+        {(state.error || error) && (
+          <div className="mb-4 p-4 bg-red-900/50 border border-red-700 rounded-lg">
+            <div className="flex items-center gap-2 text-red-200">
+              <AlertCircle className="w-5 h-5" />
+              <span className="font-medium">Error:</span>
+              <span>{state.error || error?.message || "Unknown error occurred"}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Test Configuration Buttons */}
+        <div className="text-center mb-4 flex gap-2 justify-center">
           <Button
             onClick={testSpeechConfig}
             variant="outline"
@@ -81,12 +95,22 @@ export default function AvatarBot() {
             <Headphones className="w-4 h-4 mr-2" />
             Test Speech Config
           </Button>
-          {testResult && (
-            <div className="mt-2 p-2 bg-slate-800 rounded text-xs text-slate-300 max-w-md mx-auto">
-              <pre className="whitespace-pre-wrap">{JSON.stringify(testResult, null, 2)}</pre>
-            </div>
-          )}
+          <Button
+            onClick={testChat}
+            variant="outline"
+            size="sm"
+            className="border-slate-600 text-slate-300 bg-transparent"
+          >
+            <MessageSquare className="w-4 h-4 mr-2" />
+            Test Chat
+          </Button>
         </div>
+
+        {testResult && (
+          <div className="mb-4 p-2 bg-slate-800 rounded text-xs text-slate-300 max-w-md mx-auto">
+            <pre className="whitespace-pre-wrap">{JSON.stringify(testResult, null, 2)}</pre>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Avatar Section */}
@@ -128,6 +152,14 @@ export default function AvatarBot() {
                       <div className="flex items-center gap-2 bg-red-600/80 px-3 py-1 rounded-full">
                         <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                         <span className="text-white text-sm font-medium">Recording</span>
+                      </div>
+                    </div>
+                  )}
+                  {isLoading && (
+                    <div className="absolute bottom-4 left-4">
+                      <div className="flex items-center gap-2 bg-yellow-600/80 px-3 py-1 rounded-full">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        <span className="text-white text-sm font-medium">AI Thinking...</span>
                       </div>
                     </div>
                   )}
@@ -208,7 +240,7 @@ export default function AvatarBot() {
                   <div className="space-y-4">
                     {messages.length === 0 ? (
                       <div className="text-slate-400 text-center py-8">
-                        Start a conversation by clicking "Start Listening"
+                        Start a conversation by clicking "Start Listening" or "Test Chat"
                       </div>
                     ) : (
                       messages.map((message, index) => (
@@ -243,6 +275,28 @@ export default function AvatarBot() {
                         </div>
                       ))
                     )}
+                    {isLoading && (
+                      <div className="flex gap-3 justify-start">
+                        <div className="flex gap-2 max-w-[80%]">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-green-600">
+                            <Bot className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="px-4 py-2 rounded-lg bg-slate-700 text-slate-100">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                              <div
+                                className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                                style={{ animationDelay: "0.1s" }}
+                              ></div>
+                              <div
+                                className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"
+                                style={{ animationDelay: "0.2s" }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </ScrollArea>
               </CardContent>
@@ -254,8 +308,10 @@ export default function AvatarBot() {
         <div className="mt-6 text-center">
           <div className="inline-flex items-center gap-4 px-6 py-3 bg-slate-800/50 rounded-full backdrop-blur-sm">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-slate-300 text-sm">Azure OpenAI Connected</span>
+              <div
+                className={`w-2 h-2 rounded-full ${error ? "bg-red-400 animate-pulse" : "bg-green-400 animate-pulse"}`}
+              ></div>
+              <span className="text-slate-300 text-sm">{error ? "Azure OpenAI Error" : "Azure OpenAI Connected"}</span>
             </div>
             <div className="w-px h-4 bg-slate-600"></div>
             <div className="flex items-center gap-2">

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from "react"
 import { useChat } from "ai/react"
-import type { SpeechRecognition } from "speech-recognition-polyfill" // Import SpeechRecognition
+import type { SpeechRecognition } from "speech-recognition-polyfill"
 
 interface ConversationState {
   isListening: boolean
@@ -11,6 +11,7 @@ interface ConversationState {
   audioLevel: number
   emotion: string
   confidence: number
+  error: string | null
 }
 
 export function useConversation() {
@@ -21,17 +22,28 @@ export function useConversation() {
     audioLevel: 0,
     emotion: "neutral",
     confidence: 0,
+    error: null,
   })
 
-  const { messages, append, isLoading } = useChat({
+  const { messages, append, isLoading, error } = useChat({
     api: "/api/chat",
     onFinish: (message) => {
+      console.log("Chat response received:", message)
+
       // Analyze emotion from response
       const emotion = analyzeEmotion(message.content)
-      setState((prev) => ({ ...prev, emotion, isSpeaking: true }))
+      setState((prev) => ({ ...prev, emotion, isSpeaking: true, error: null }))
 
       // Convert to speech
       speakText(message.content)
+    },
+    onError: (error) => {
+      console.error("Chat error:", error)
+      setState((prev) => ({
+        ...prev,
+        error: error.message || "Failed to get response from AI",
+        isSpeaking: false,
+      }))
     },
   })
 
@@ -165,6 +177,9 @@ export function useConversation() {
 
   const startListening = useCallback(async () => {
     try {
+      // Clear any previous errors
+      setState((prev) => ({ ...prev, error: null }))
+
       // Reset previous text
       webSpeechTextRef.current = ""
 
@@ -198,7 +213,16 @@ export function useConversation() {
         if (webSpeechTextRef.current.trim()) {
           console.log("Using Web Speech API result:", webSpeechTextRef.current)
           setState((prev) => ({ ...prev, confidence: 0.9 }))
-          await append({ role: "user", content: webSpeechTextRef.current })
+
+          try {
+            await append({ role: "user", content: webSpeechTextRef.current })
+          } catch (error) {
+            console.error("Error appending message:", error)
+            setState((prev) => ({
+              ...prev,
+              error: "Failed to send message to AI. Please try again.",
+            }))
+          }
         } else {
           // Fallback to Azure Speech Services
           await processAudioWithAzureSpeech(audioBlob)
@@ -231,7 +255,10 @@ export function useConversation() {
 
         recognition.onerror = (event) => {
           console.error("Speech recognition error:", event.error)
-          // Continue with audio recording for Azure fallback
+          setState((prev) => ({
+            ...prev,
+            error: `Speech recognition error: ${event.error}`,
+          }))
         }
 
         recognition.onend = () => {
@@ -254,9 +281,13 @@ export function useConversation() {
       }, 10000)
     } catch (error) {
       console.error("Error starting speech recognition:", error)
-      setState((prev) => ({ ...prev, isListening: false }))
+      setState((prev) => ({
+        ...prev,
+        isListening: false,
+        error: "Failed to start listening. Please check microphone permissions.",
+      }))
     }
-  }, [])
+  }, [append])
 
   const stopListening = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -293,24 +324,55 @@ export function useConversation() {
 
       if (response.ok && result.text && result.text.trim()) {
         setState((prev) => ({ ...prev, confidence: result.confidence || 0.8 }))
-        await append({ role: "user", content: result.text })
+
+        try {
+          await append({ role: "user", content: result.text })
+        } catch (error) {
+          console.error("Error appending Azure Speech result:", error)
+          setState((prev) => ({
+            ...prev,
+            error: "Failed to send transcribed message to AI. Please try again.",
+          }))
+        }
       } else if (result.error) {
         console.warn("Azure Speech failed:", result.error)
-        // Don't throw error, just log it
+        setState((prev) => ({
+          ...prev,
+          error: "Speech recognition failed. Please try speaking again.",
+        }))
       }
     } catch (error) {
       console.error("Error processing audio with Azure Speech:", error)
-      // Don't throw error to prevent breaking the UI
+      setState((prev) => ({
+        ...prev,
+        error: "Failed to process audio. Please try again.",
+      }))
     } finally {
       setState((prev) => ({ ...prev, isProcessing: false }))
     }
   }
+
+  // Test chat functionality
+  const testChat = useCallback(async () => {
+    try {
+      console.log("Testing chat functionality...")
+      await append({ role: "user", content: "Hello, can you hear me?" })
+    } catch (error) {
+      console.error("Chat test failed:", error)
+      setState((prev) => ({
+        ...prev,
+        error: "Chat test failed. Please check your configuration.",
+      }))
+    }
+  }, [append])
 
   return {
     messages,
     state,
     startListening,
     stopListening,
+    testChat,
     isLoading,
+    error,
   }
 }
