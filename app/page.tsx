@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,12 +17,124 @@ import {
   MessageSquare,
   AlertCircle,
   Settings,
+  Loader2,
 } from "lucide-react"
-import { useConversation } from "@/hooks/use-conversation"
-import { HumanAvatarCanvas } from "@/components/human-avatar"
-import { VoiceSelector } from "@/components/voice-selector"
+
+// Dynamic imports to prevent SSR issues
+const HumanAvatarCanvas = dynamic(() => import("@/components/human-avatar").then((mod) => mod.HumanAvatarCanvas), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center bg-slate-900 rounded-lg">
+      <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+    </div>
+  ),
+})
+
+const VoiceSelector = dynamic(() => import("@/components/voice-selector").then((mod) => mod.VoiceSelector), {
+  ssr: false,
+  loading: () => (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Volume2 className="w-4 h-4 text-slate-400" />
+        <span className="text-sm font-medium text-slate-300">Loading voices...</span>
+      </div>
+    </div>
+  ),
+})
+
+const ConversationHook = dynamic(() => import("@/hooks/use-conversation").then((mod) => mod.useConversation), {
+  ssr: false,
+})
 
 export default function AvatarBot() {
+  const [isClient, setIsClient] = useState(false)
+  const [conversationData, setConversationData] = useState<any>(null)
+  const [isMuted, setIsMuted] = useState(false)
+  const [testResult, setTestResult] = useState<any>(null)
+  const [azureTestResult, setAzureTestResult] = useState<any>(null)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  useEffect(() => {
+    if (isClient && !conversationData) {
+      // Dynamically import and initialize the conversation hook
+      import("@/hooks/use-conversation").then(({ useConversation }) => {
+        // This is a workaround since we can't use hooks conditionally
+        // We'll handle this in a separate component
+      })
+    }
+  }, [isClient, conversationData])
+
+  useEffect(() => {
+    // Mute/unmute speech synthesis
+    if (isMuted && typeof window !== "undefined" && "speechSynthesis" in window) {
+      speechSynthesis.cancel()
+    }
+  }, [isMuted])
+
+  const testSpeechConfig = async () => {
+    try {
+      const response = await fetch("/api/test-speech")
+      const result = await response.json()
+      setTestResult(result)
+      console.log("Azure Speech config test:", result)
+    } catch (error) {
+      console.error("Speech test failed:", error)
+      setTestResult({ error: "Speech test failed" })
+    }
+  }
+
+  const testAzureOpenAI = async () => {
+    try {
+      const response = await fetch("/api/test-azure-openai")
+      const result = await response.json()
+      setAzureTestResult(result)
+      console.log("Azure OpenAI test:", result)
+    } catch (error) {
+      console.error("Azure OpenAI test failed:", error)
+      setAzureTestResult({ error: "Azure OpenAI test failed" })
+    }
+  }
+
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-white mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-2">Loading Avatar Assistant...</h1>
+          <p className="text-slate-300">Initializing AI components</p>
+        </div>
+      </div>
+    )
+  }
+
+  return <AvatarBotClient />
+}
+
+// Separate client component that uses hooks
+function AvatarBotClient() {
+  const [conversationHook, setConversationHook] = useState<any>(null)
+  const [isMuted, setIsMuted] = useState(false)
+  const [testResult, setTestResult] = useState<any>(null)
+  const [azureTestResult, setAzureTestResult] = useState<any>(null)
+
+  useEffect(() => {
+    // Initialize conversation hook on client side
+    import("@/hooks/use-conversation").then(({ useConversation }) => {
+      // We need to create a wrapper component for this
+    })
+  }, [])
+
+  return <AvatarBotWithHooks />
+}
+
+// Component that actually uses the hooks
+function AvatarBotWithHooks() {
+  // Import the hook dynamically
+  const useConversation = require("@/hooks/use-conversation").useConversation
+
   const {
     messages,
     state,
@@ -34,13 +147,14 @@ export default function AvatarBot() {
     availableVoices,
     setSelectedVoice,
   } = useConversation()
+
   const [isMuted, setIsMuted] = useState(false)
   const [testResult, setTestResult] = useState<any>(null)
   const [azureTestResult, setAzureTestResult] = useState<any>(null)
 
   useEffect(() => {
     // Mute/unmute speech synthesis
-    if (isMuted) {
+    if (isMuted && typeof window !== "undefined" && "speechSynthesis" in window) {
       speechSynthesis.cancel()
     }
   }, [isMuted])
@@ -84,22 +198,6 @@ export default function AvatarBot() {
     if (state.isProcessing) return "Processing..."
     if (isLoading) return "Thinking..."
     return "Ready"
-  }
-
-  const getAvatarColor = () => {
-    if (state.error) return "bg-red-400"
-    switch (state.emotion) {
-      case "happy":
-        return "bg-yellow-400"
-      case "sad":
-        return "bg-blue-400"
-      case "excited":
-        return "bg-orange-400"
-      case "concerned":
-        return "bg-red-400"
-      default:
-        return "bg-green-400"
-    }
   }
 
   return (

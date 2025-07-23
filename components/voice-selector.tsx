@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Volume2, Play } from "lucide-react"
@@ -11,8 +12,14 @@ interface VoiceSelectorProps {
 }
 
 export function VoiceSelector({ selectedVoice, availableVoices, onVoiceChange }: VoiceSelectorProps) {
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
   const testVoice = (voice: SpeechSynthesisVoice) => {
-    if ("speechSynthesis" in window) {
+    if (isClient && "speechSynthesis" in window) {
       speechSynthesis.cancel()
       const utterance = new SpeechSynthesisUtterance("Hello! This is how I sound.")
       utterance.voice = voice
@@ -46,6 +53,17 @@ export function VoiceSelector({ selectedVoice, availableVoices, onVoiceChange }:
       ),
     }
     return categories
+  }
+
+  if (!isClient) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Volume2 className="w-4 h-4 text-slate-400" />
+          <span className="text-sm font-medium text-slate-300">Loading voices...</span>
+        </div>
+      </div>
+    )
   }
 
   const { premium, standard } = categorizeVoices()

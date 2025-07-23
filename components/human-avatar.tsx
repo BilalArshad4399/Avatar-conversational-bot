@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useRef, useEffect, useState } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
 import { OrbitControls, Sphere, Box, Cylinder } from "@react-three/drei"
 import type * as THREE from "three"
@@ -169,6 +169,20 @@ function HumanAvatar({ emotion, isSpeaking, audioLevel }: HumanAvatarProps) {
 }
 
 export function HumanAvatarCanvas({ emotion, isSpeaking, audioLevel }: HumanAvatarProps) {
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  if (!isClient) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-slate-900 rounded-lg">
+        <div className="text-slate-400">Loading 3D Avatar...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="w-full h-full">
       <Canvas camera={{ position: [0, 0, 6], fov: 50 }}>
