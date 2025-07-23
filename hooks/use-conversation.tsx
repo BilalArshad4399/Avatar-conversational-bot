@@ -2,7 +2,53 @@
 
 import { useState, useCallback, useRef, useEffect } from "react"
 import { useChat } from "ai/react"
-import type { SpeechRecognition } from "speech-recognition-polyfill"
+
+// Define types to avoid TypeScript issues
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number
+  readonly results: SpeechRecognitionResultList
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number
+  item(index: number): SpeechRecognitionResult
+  [index: number]: SpeechRecognitionResult
+}
+
+interface SpeechRecognitionResult {
+  readonly isFinal: boolean
+  readonly length: number
+  item(index: number): SpeechRecognitionAlternative
+  [index: number]: SpeechRecognitionAlternative
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string
+  readonly confidence: number
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string
+  readonly message: string
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start(): void
+  stop(): void
+  onresult: ((event: SpeechRecognitionEvent) => void) | null
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null
+  onend: (() => void) | null
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition
+    webkitSpeechRecognition: new () => SpeechRecognition
+  }
+}
 
 interface ConversationState {
   isListening: boolean
@@ -29,23 +75,29 @@ export function useConversation() {
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     const loadVoices = () => {
-      const voices = speechSynthesis.getVoices()
-      const englishVoices = voices.filter((voice) => voice.lang.startsWith("en"))
-      setAvailableVoices(englishVoices)
+      if ("speechSynthesis" in window) {
+        const voices = speechSynthesis.getVoices()
+        const englishVoices = voices.filter((voice) => voice.lang.startsWith("en"))
+        setAvailableVoices(englishVoices)
 
-      // Set default voice (prefer Neural or Premium voices)
-      const defaultVoice =
-        englishVoices.find((voice) => voice.name.includes("Neural") || voice.name.includes("Premium")) ||
-        englishVoices[0]
+        // Set default voice (prefer Neural or Premium voices)
+        const defaultVoice =
+          englishVoices.find((voice) => voice.name.includes("Neural") || voice.name.includes("Premium")) ||
+          englishVoices[0]
 
-      if (defaultVoice && !selectedVoice) {
-        setSelectedVoice(defaultVoice)
+        if (defaultVoice && !selectedVoice) {
+          setSelectedVoice(defaultVoice)
+        }
       }
     }
 
     loadVoices()
-    speechSynthesis.onvoiceschanged = loadVoices
+    if ("speechSynthesis" in window) {
+      speechSynthesis.onvoiceschanged = loadVoices
+    }
   }, [selectedVoice])
 
   const { messages, append, isLoading, error } = useChat({
@@ -186,48 +238,49 @@ export function useConversation() {
 
   const speakText = useCallback(
     (text: string) => {
-      if ("speechSynthesis" in window) {
-        speechSynthesis.cancel()
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) return
 
-        const utterance = new SpeechSynthesisUtterance(text)
-        utterance.rate = 0.9
-        utterance.pitch = 1.1
-        utterance.volume = 0.8
+      speechSynthesis.cancel()
 
-        // Use selected voice or find a good default
-        if (selectedVoice) {
-          utterance.voice = selectedVoice
-        } else {
-          const voices = speechSynthesis.getVoices()
-          const preferredVoice = voices.find(
-            (voice) =>
-              voice.name.includes("Neural") || voice.name.includes("Premium") || voice.lang.startsWith("en-US"),
-          )
-          if (preferredVoice) {
-            utterance.voice = preferredVoice
-          }
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 0.9
+      utterance.pitch = 1.1
+      utterance.volume = 0.8
+
+      // Use selected voice or find a good default
+      if (selectedVoice) {
+        utterance.voice = selectedVoice
+      } else {
+        const voices = speechSynthesis.getVoices()
+        const preferredVoice = voices.find(
+          (voice) => voice.name.includes("Neural") || voice.name.includes("Premium") || voice.lang.startsWith("en-US"),
+        )
+        if (preferredVoice) {
+          utterance.voice = preferredVoice
         }
-
-        utterance.onstart = () => {
-          setState((prev) => ({ ...prev, isSpeaking: true }))
-        }
-
-        utterance.onend = () => {
-          setState((prev) => ({ ...prev, isSpeaking: false }))
-        }
-
-        utterance.onerror = () => {
-          setState((prev) => ({ ...prev, isSpeaking: false }))
-        }
-
-        speechSynthesis.speak(utterance)
       }
+
+      utterance.onstart = () => {
+        setState((prev) => ({ ...prev, isSpeaking: true }))
+      }
+
+      utterance.onend = () => {
+        setState((prev) => ({ ...prev, isSpeaking: false }))
+      }
+
+      utterance.onerror = () => {
+        setState((prev) => ({ ...prev, isSpeaking: false }))
+      }
+
+      speechSynthesis.speak(utterance)
     },
     [selectedVoice],
   )
 
   const convertToWav = async (audioBlob: Blob): Promise<Blob> => {
     try {
+      if (typeof window === "undefined") return audioBlob
+
       // Create audio context for processing
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -297,6 +350,8 @@ export function useConversation() {
   }
 
   const startListening = useCallback(async () => {
+    if (typeof window === "undefined") return
+
     try {
       // Clear any previous errors
       setState((prev) => ({ ...prev, error: null }))
@@ -351,7 +406,7 @@ export function useConversation() {
       }
 
       // Primary: Use Web Speech API for real-time recognition
-      if (typeof window !== "undefined" && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
+      if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
         const recognition = new SpeechRecognition()
         recognitionRef.current = recognition
@@ -489,13 +544,6 @@ export function useConversation() {
       console.log("Direct chat result:", result)
 
       if (result.success && result.message) {
-        // Manually add messages to the conversation
-        const newMessages = [
-          ...messages,
-          { id: Date.now().toString(), role: "user", content: userMessage },
-          { id: (Date.now() + 1).toString(), role: "assistant", content: result.message },
-        ]
-
         // Analyze emotion and speak the response
         const emotion = analyzeEmotion(result.message)
         setState((prev) => ({ ...prev, emotion, isSpeaking: true, error: null }))
