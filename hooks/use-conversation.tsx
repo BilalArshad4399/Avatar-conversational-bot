@@ -60,6 +60,12 @@ interface ConversationState {
   error: string | null
 }
 
+// Mobile detection
+function isMobileDevice() {
+  if (typeof window === "undefined") return false
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+}
+
 export function useConversation() {
   const [state, setState] = useState<ConversationState>({
     isListening: false,
@@ -356,19 +362,38 @@ export function useConversation() {
       // Clear any previous errors
       setState((prev) => ({ ...prev, error: null }))
 
+      // Check HTTPS requirement for mobile
+      if (isMobileDevice() && window.location.protocol !== "https:") {
+        setState((prev) => ({
+          ...prev,
+          error: "HTTPS is required for speech recognition on mobile devices",
+        }))
+        return
+      }
+
       // Reset previous text
       webSpeechTextRef.current = ""
 
-      // Start audio recording for Azure Speech Services
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      })
+      // Request microphone permission explicitly
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
+      } catch (permissionError) {
+        console.error("Microphone permission denied:", permissionError)
+        setState((prev) => ({
+          ...prev,
+          error: "Microphone permission denied. Please allow microphone access and try again.",
+        }))
+        return
+      }
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: "audio/webm;codecs=opus",
@@ -429,10 +454,26 @@ export function useConversation() {
 
         recognition.onerror = (event) => {
           console.error("Speech recognition error:", event.error)
-          setState((prev) => ({
-            ...prev,
-            error: `Speech recognition error: ${event.error}`,
-          }))
+
+          let errorMessage = "Speech recognition error"
+          switch (event.error) {
+            case "not-allowed":
+              errorMessage = "Microphone access denied. Please allow microphone permission."
+              break
+            case "no-speech":
+              errorMessage = "No speech detected. Please try speaking again."
+              break
+            case "network":
+              errorMessage = "Network error. Please check your internet connection."
+              break
+            case "service-not-allowed":
+              errorMessage = "Speech service not allowed. Please use HTTPS."
+              break
+            default:
+              errorMessage = `Speech recognition error: ${event.error}`
+          }
+
+          setState((prev) => ({ ...prev, error: errorMessage }))
         }
 
         recognition.onend = () => {
@@ -444,21 +485,29 @@ export function useConversation() {
         }
 
         recognition.start()
+      } else {
+        setState((prev) => ({
+          ...prev,
+          error: "Speech recognition not supported in this browser. Try Chrome or Safari.",
+        }))
+        stream.getTracks().forEach((track) => track.stop())
+        return
       }
 
       mediaRecorder.start()
       setState((prev) => ({ ...prev, isListening: true }))
 
-      // Auto-stop after 10 seconds
+      // Auto-stop after 10 seconds (shorter for mobile)
+      const timeout = isMobileDevice() ? 8000 : 10000
       setTimeout(() => {
         stopListening()
-      }, 10000)
+      }, timeout)
     } catch (error) {
       console.error("Error starting speech recognition:", error)
       setState((prev) => ({
         ...prev,
         isListening: false,
-        error: "Failed to start listening. Please check microphone permissions.",
+        error: "Failed to start listening. Please check microphone permissions and try again.",
       }))
     }
   }, [append])

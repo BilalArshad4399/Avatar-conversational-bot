@@ -37,11 +37,7 @@ Create `.env.local` with your Azure credentials:
 # Azure OpenAI Configuration
 AZURE_OPENAI_ENDPOINT=https://openaiservices-gosign.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
 AZURE_OPENAI_API_KEY=your-azure-openai-api-key
-DEPLOYMENT_NAME=gpt-4o-pilot-ai-production
-
-# Azure Speech Services Configuration
-AZURE_SPEECH_ENDPOINT=https://swedencentral.api.cognitive.microsoft.com/
-SPEECH_KEY=your-azure-speech-key
+DEPLOYMENT_NAME=your-deployment-name
 \`\`\`
 
 3. **Start development server**:
@@ -77,7 +73,7 @@ Navigate to `http://localhost:3000`
 
 ### Azure OpenAI
 - **Endpoint**: `openaiservices-gosign.openai.azure.com`
-- **Deployment**: `gpt-4o-pilot-ai-production`
+- **Deployment**: `your-deployment-name`
 - **API Version**: `2025-01-01-preview`
 - **Model**: GPT-4o with enhanced emotional intelligence
 
