@@ -1,8 +1,9 @@
 "use client"
 
-import { useRef, useEffect, useState } from "react"
+import { useRef, useEffect, useState, Suspense } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
 import { OrbitControls, Sphere, Box, Cylinder } from "@react-three/drei"
+import { Loader2 } from "lucide-react"
 import type * as THREE from "three"
 
 interface HumanAvatarProps {
@@ -168,6 +169,14 @@ function HumanAvatar({ emotion, isSpeaking, audioLevel }: HumanAvatarProps) {
   )
 }
 
+function AvatarFallback() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-slate-900 rounded-lg">
+      <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+    </div>
+  )
+}
+
 export function HumanAvatarCanvas({ emotion, isSpeaking, audioLevel }: HumanAvatarProps) {
   const [isClient, setIsClient] = useState(false)
 
@@ -176,22 +185,20 @@ export function HumanAvatarCanvas({ emotion, isSpeaking, audioLevel }: HumanAvat
   }, [])
 
   if (!isClient) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-slate-900 rounded-lg">
-        <div className="text-slate-400">Loading 3D Avatar...</div>
-      </div>
-    )
+    return <AvatarFallback />
   }
 
   return (
     <div className="w-full h-full">
-      <Canvas camera={{ position: [0, 0, 6], fov: 50 }}>
-        <ambientLight intensity={0.6} />
-        <pointLight position={[10, 10, 10]} intensity={0.8} />
-        <pointLight position={[-10, -10, -10]} intensity={0.3} />
-        <HumanAvatar emotion={emotion} isSpeaking={isSpeaking} audioLevel={audioLevel} />
-        <OrbitControls enableZoom={false} enablePan={false} />
-      </Canvas>
+      <Suspense fallback={<AvatarFallback />}>
+        <Canvas camera={{ position: [0, 0, 6], fov: 50 }}>
+          <ambientLight intensity={0.6} />
+          <pointLight position={[10, 10, 10]} intensity={0.8} />
+          <pointLight position={[-10, -10, -10]} intensity={0.3} />
+          <HumanAvatar emotion={emotion} isSpeaking={isSpeaking} audioLevel={audioLevel} />
+          <OrbitControls enableZoom={false} enablePan={false} />
+        </Canvas>
+      </Suspense>
     </div>
   )
 }

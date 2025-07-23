@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,12 +18,95 @@ import {
   MessageSquare,
   AlertCircle,
   Settings,
+  Loader2,
 } from "lucide-react"
-import { useConversation } from "@/hooks/use-conversation"
-import { HumanAvatarCanvas } from "@/components/human-avatar"
-import { VoiceSelector } from "@/components/voice-selector"
 
-export default function AvatarBotMain() {
+// Lazy load components that might cause hydration issues
+function AvatarBotMain() {
+  const [isReady, setIsReady] = useState(false)
+  const [components, setComponents] = useState<{
+    useConversation: any
+    HumanAvatarCanvas: React.ComponentType<any> | null
+    VoiceSelector: React.ComponentType<any> | null
+  }>({
+    useConversation: null,
+    HumanAvatarCanvas: null,
+    VoiceSelector: null,
+  })
+
+  const [isMuted, setIsMuted] = useState(false)
+  const [testResult, setTestResult] = useState<any>(null)
+  const [azureTestResult, setAzureTestResult] = useState<any>(null)
+
+  useEffect(() => {
+    // Load all components after mount to avoid hydration issues
+    Promise.all([
+      import("@/hooks/use-conversation"),
+      import("@/components/human-avatar"),
+      import("@/components/voice-selector"),
+    ])
+      .then(([conversationModule, avatarModule, voiceModule]) => {
+        setComponents({
+          useConversation: conversationModule.useConversation,
+          HumanAvatarCanvas: avatarModule.HumanAvatarCanvas,
+          VoiceSelector: voiceModule.VoiceSelector,
+        })
+        setIsReady(true)
+      })
+      .catch((error) => {
+        console.error("Failed to load components:", error)
+      })
+  }, [])
+
+  if (!isReady || !components.useConversation) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-white mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-2">Loading Components...</h1>
+          <p className="text-slate-300">Please wait while we initialize the avatar system</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <AvatarBotContent
+      useConversation={components.useConversation}
+      HumanAvatarCanvas={components.HumanAvatarCanvas}
+      VoiceSelector={components.VoiceSelector}
+      isMuted={isMuted}
+      setIsMuted={setIsMuted}
+      testResult={testResult}
+      setTestResult={setTestResult}
+      azureTestResult={azureTestResult}
+      setAzureTestResult={setAzureTestResult}
+    />
+  )
+}
+
+// Separate component that uses the loaded hooks and components
+function AvatarBotContent({
+  useConversation,
+  HumanAvatarCanvas,
+  VoiceSelector,
+  isMuted,
+  setIsMuted,
+  testResult,
+  setTestResult,
+  azureTestResult,
+  setAzureTestResult,
+}: {
+  useConversation: any
+  HumanAvatarCanvas: React.ComponentType<any> | null
+  VoiceSelector: React.ComponentType<any> | null
+  isMuted: boolean
+  setIsMuted: (muted: boolean) => void
+  testResult: any
+  setTestResult: (result: any) => void
+  azureTestResult: any
+  setAzureTestResult: (result: any) => void
+}) {
   const {
     messages,
     state,
@@ -34,10 +119,6 @@ export default function AvatarBotMain() {
     availableVoices,
     setSelectedVoice,
   } = useConversation()
-
-  const [isMuted, setIsMuted] = useState(false)
-  const [testResult, setTestResult] = useState<any>(null)
-  const [azureTestResult, setAzureTestResult] = useState<any>(null)
 
   useEffect(() => {
     // Mute/unmute speech synthesis
@@ -192,11 +273,17 @@ export default function AvatarBotMain() {
               <CardContent>
                 {/* Avatar Display */}
                 <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden relative">
-                  <HumanAvatarCanvas
-                    emotion={state.emotion}
-                    isSpeaking={state.isSpeaking}
-                    audioLevel={state.audioLevel}
-                  />
+                  {HumanAvatarCanvas ? (
+                    <HumanAvatarCanvas
+                      emotion={state.emotion}
+                      isSpeaking={state.isSpeaking}
+                      audioLevel={state.audioLevel}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                    </div>
+                  )}
 
                   {state.isSpeaking && (
                     <div className="absolute top-4 right-4">
@@ -230,11 +317,9 @@ export default function AvatarBotMain() {
                     {Array.from({ length: 20 }).map((_, i) => (
                       <div
                         key={i}
-                        className={`w-2 bg-gradient-to-t from-blue-500 to-purple-500 rounded-t transition-all duration-150 ${
-                          state.isListening || state.isSpeaking ? `h-${Math.floor(Math.random() * 8) + 1}` : "h-1"
-                        }`}
+                        className="w-2 bg-gradient-to-t from-blue-500 to-purple-500 rounded-t transition-all duration-150"
                         style={{
-                          height: state.isListening || state.isSpeaking ? `${Math.random() * 100 + 10}%` : "10%",
+                          height: state.isListening || state.isSpeaking ? `${Math.random() * 80 + 20}%` : "10%",
                           animationDelay: `${i * 50}ms`,
                         }}
                       />
@@ -244,11 +329,20 @@ export default function AvatarBotMain() {
 
                 {/* Voice Selection */}
                 <div className="mt-4 p-4 bg-slate-800/50 rounded-lg">
-                  <VoiceSelector
-                    selectedVoice={selectedVoice}
-                    availableVoices={availableVoices}
-                    onVoiceChange={setSelectedVoice}
-                  />
+                  {VoiceSelector ? (
+                    <VoiceSelector
+                      selectedVoice={selectedVoice}
+                      availableVoices={availableVoices}
+                      onVoiceChange={setSelectedVoice}
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Volume2 className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm font-medium text-slate-300">Loading voices...</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Controls */}
@@ -397,3 +491,5 @@ export default function AvatarBotMain() {
     </div>
   )
 }
+
+export default AvatarBotMain

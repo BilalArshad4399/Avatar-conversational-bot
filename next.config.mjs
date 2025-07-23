@@ -19,8 +19,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Force dynamic rendering for pages that use browser APIs
+  // Disable static optimization to prevent hydration issues
   output: 'standalone',
+  poweredByHeader: false,
+  reactStrictMode: false, // Temporarily disable to avoid double-rendering issues
 }
 
 export default nextConfig
