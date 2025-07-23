@@ -1,10 +1,11 @@
 # Azure AI Avatar Conversational Bot
 
-A real-time avatar-based conversational bot powered by Azure OpenAI GPT-4o with speech-to-text, text-to-speech, and 3D avatar integration.
+A real-time avatar-based conversational bot powered by Azure OpenAI GPT-4o and Azure Speech Services with speech-to-text, text-to-speech, and 3D avatar integration.
 
 ## 🚀 Features
 
 - **Azure OpenAI Integration**: Uses GPT-4o model deployed on Azure
+- **Azure Speech Services**: Professional speech-to-text recognition
 - **Real-time Speech Processing**: Sub-3 second response times
 - **3D Avatar**: Emotional expressions and lip sync
 - **Voice Interaction**: Speech-to-text and text-to-speech
@@ -18,6 +19,7 @@ A real-time avatar-based conversational bot powered by Azure OpenAI GPT-4o with 
 
 - Node.js 18+
 - Azure OpenAI Service account
+- Azure Speech Services account
 - Modern browser with microphone access
 
 ### Installation
@@ -30,11 +32,16 @@ npm install
 \`\`\`
 
 2. **Configure environment variables**:
-Create `.env.local` with your Azure OpenAI credentials:
+Create `.env.local` with your Azure credentials:
 \`\`\`env
+# Azure OpenAI Configuration
 AZURE_OPENAI_ENDPOINT=https://openaiservices-gosign.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview
 AZURE_OPENAI_API_KEY=your-azure-openai-api-key
 DEPLOYMENT_NAME=gpt-4o-pilot-ai-production
+
+# Azure Speech Services Configuration
+AZURE_SPEECH_ENDPOINT=https://swedencentral.api.cognitive.microsoft.com/
+SPEECH_KEY=your-azure-speech-key
 \`\`\`
 
 3. **Start development server**:
@@ -55,28 +62,43 @@ Navigate to `http://localhost:3000`
 
 ### Backend APIs
 - **`/api/chat`**: Azure OpenAI chat completion
-- **`/api/whisper`**: Azure Speech-to-text
-- **`/api/tts`**: Text-to-speech processing
+- **`/api/speech`**: Azure Speech Services transcription
+- **`/api/test-speech`**: Configuration testing
 
 ### Key Technologies
 - **Next.js 14**: Full-stack React framework
 - **Azure OpenAI**: GPT-4o language model
+- **Azure Speech Services**: Professional speech recognition
 - **Three.js**: 3D graphics and avatar
-- **Web Speech API**: Browser speech recognition
+- **Web Speech API**: Browser speech recognition (fallback)
 - **AI SDK**: Unified AI model interface
 
-## 🎯 Azure OpenAI Configuration
+## 🎯 Azure Services Configuration
 
-### Model Details
+### Azure OpenAI
 - **Endpoint**: `openaiservices-gosign.openai.azure.com`
 - **Deployment**: `gpt-4o-pilot-ai-production`
 - **API Version**: `2025-01-01-preview`
 - **Model**: GPT-4o with enhanced emotional intelligence
 
-### Authentication
-Uses API key authentication with the `api-key` header format required by Azure OpenAI.
+### Azure Speech Services
+- **Endpoint**: `swedencentral.api.cognitive.microsoft.com`
+- **Region**: Sweden Central
+- **Authentication**: Subscription key
+- **Format**: 16-bit PCM WAV, 16kHz sample rate
 
 ## 🔧 Advanced Features
+
+### Dual Speech Recognition
+1. **Web Speech API** (primary): Fast, browser-native recognition
+2. **Azure Speech Services** (fallback): Professional-grade accuracy
+3. **Smart switching**: Uses Azure when Web Speech fails
+
+### Audio Processing Pipeline
+1. **Record audio** with optimized settings (16kHz, mono)
+2. **Convert to WAV** format with proper encoding
+3. **Send to Azure Speech Services** with error handling
+4. **Process results** and display in conversation
 
 ### Emotion Detection
 The system analyzes text responses to determine emotional context:
@@ -93,12 +115,6 @@ The system analyzes text responses to determine emotional context:
 - **Head movements** during speech
 - **Lip sync simulation** (basic implementation)
 
-### Performance Optimization
-- **Streaming responses** from Azure OpenAI
-- **Parallel processing** of STT, LLM, and TTS
-- **Audio buffering** for smooth playback
-- **Real-time audio visualization**
-
 ## 📊 API Endpoints
 
 ### POST /api/chat
@@ -111,11 +127,11 @@ Process conversation with Azure OpenAI
 }
 \`\`\`
 
-### POST /api/whisper
+### POST /api/speech
 Convert speech to text using Azure Speech Services
 \`\`\`json
 {
-  "audio": "audio_blob_data"
+  "audio": "audio_wav_data"
 }
 \`\`\`
 
@@ -127,16 +143,17 @@ Response:
 }
 \`\`\`
 
-## 🚀 Deployment
-
-### Docker Deployment
-\`\`\`bash
-# Build image
-docker build -t avatar-bot .
-
-# Run container
-docker run -p 3000:3000 --env-file .env.local avatar-bot
+### GET /api/test-speech
+Test Azure Speech Services configuration
+\`\`\`json
+{
+  "isConnected": true,
+  "endpoint": "https://swedencentral.api.cognitive.microsoft.com/",
+  "hasKey": true
+}
 \`\`\`
+
+## 🚀 Deployment
 
 ### Vercel Deployment
 \`\`\`bash
@@ -151,23 +168,29 @@ Add environment variables in Vercel dashboard:
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_API_KEY`
 - `DEPLOYMENT_NAME`
+- `AZURE_SPEECH_ENDPOINT`
+- `SPEECH_KEY`
+
+### Docker Deployment
+\`\`\`bash
+# Build image
+docker build -t avatar-bot .
+
+# Run container
+docker run -p 3000:3000 --env-file .env.local avatar-bot
+\`\`\`
 
 ## 🧪 Testing
 
-### Unit Tests
-\`\`\`bash
-npm run test
-\`\`\`
-
-### Integration Tests
-\`\`\`bash
-npm run test:integration
-\`\`\`
+### Configuration Testing
+1. Click "Test Speech Config" to verify Azure Speech Services setup
+2. Check console logs for detailed debugging information
+3. Verify API connectivity and available models
 
 ### Manual Testing
 1. Click "Start Listening"
 2. Speak into microphone
-3. Observe avatar response
+3. Observe avatar response and emotion changes
 4. Check conversation history
 
 ## 🔒 Security
@@ -187,13 +210,12 @@ npm run test:integration
 ## 🛠 Customization
 
 ### Adding Custom TTS
-Replace Web Speech API with advanced TTS:
+Replace Web Speech API with Azure Speech Services TTS:
 \`\`\`typescript
-// Example: Coqui XTTS integration
 const synthesizeSpeech = async (text: string) => {
-  const response = await fetch('/api/coqui-tts', {
+  const response = await fetch('/api/azure-tts', {
     method: 'POST',
-    body: JSON.stringify({ text, voice: 'custom-voice' })
+    body: JSON.stringify({ text, voice: 'en-US-AriaNeural' })
   });
   return response.blob();
 };
@@ -229,4 +251,4 @@ MIT License - see LICENSE file for details.
 For issues and questions:
 - Create GitHub issue
 - Check documentation
-- Review Azure OpenAI service status
+- Review Azure services status

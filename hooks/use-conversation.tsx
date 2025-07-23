@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from "react"
 import { useChat } from "ai/react"
-import type { SpeechRecognition } from "web-speech-api"
+import type { SpeechRecognition } from "speech-recognition-polyfill" // Import SpeechRecognition
 
 interface ConversationState {
   isListening: boolean
@@ -208,7 +208,7 @@ export function useConversation() {
       }
 
       // Primary: Use Web Speech API for real-time recognition
-      if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      if (typeof window !== "undefined" && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
         const recognition = new SpeechRecognition()
         recognitionRef.current = recognition
